@@ -50,11 +50,16 @@ function App() {
     if (!sessionActive || isSuspended) return;
 
     const rawBase = import.meta.env.VITE_API_BASE_URL || '127.0.0.1:8000';
-    const API_BASE = rawBase.replace(/^https?:\/\//, '');
+    // Clean the base URL: remove protocols and trailing slashes
+    const API_BASE = rawBase.replace(/^https?:\/\//, '').replace(/\/$/, '');
     const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     
+    console.log(`Connecting to Video WS: ${WS_PROTOCOL}//${API_BASE}/ws/video`);
     const videoWs = new WebSocket(`${WS_PROTOCOL}//${API_BASE}/ws/video`);
     const audioWs = new WebSocket(`${WS_PROTOCOL}//${API_BASE}/ws/audio`);
+
+    videoWs.onerror = (err) => console.error("Video WebSocket Error:", err);
+    audioWs.onerror = (err) => console.error("Audio WebSocket Error:", err);
 
     let stream = null;
     let videoInterval = null;
@@ -290,9 +295,10 @@ function App() {
 
   const handleStartSession = async (config) => {
     const rawBase = import.meta.env.VITE_API_BASE_URL || '127.0.0.1:8000';
-    const API_BASE = rawBase.replace(/^https?:\/\//, '');
+    const API_BASE = rawBase.replace(/^https?:\/\//, '').replace(/\/$/, '');
     const HTTP_PROTOCOL = window.location.protocol === 'https:' ? 'https:' : 'http:';
 
+    console.log(`Starting session at: ${HTTP_PROTOCOL}//${API_BASE}/api/session/start`);
     try {
       await fetch(`${HTTP_PROTOCOL}//${API_BASE}/api/session/start`, {
         method: 'POST',
@@ -324,7 +330,7 @@ function App() {
 
   const downloadReport = async () => {
     const rawBase = import.meta.env.VITE_API_BASE_URL || '127.0.0.1:8000';
-    const API_BASE = rawBase.replace(/^https?:\/\//, '');
+    const API_BASE = rawBase.replace(/^https?:\/\//, '').replace(/\/$/, '');
     const HTTP_PROTOCOL = window.location.protocol === 'https:' ? 'https:' : 'http:';
     
     try {

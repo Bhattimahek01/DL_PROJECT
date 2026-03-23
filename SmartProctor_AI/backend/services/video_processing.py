@@ -73,10 +73,22 @@ alert_buffers = {
     "camera_off": {"start_time": None, "active": False}
 }
 
-async def process_video_feed(websocket):
-    from ultralytics import YOLO
+from ultralytics import YOLO
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize YOLO model globally to avoid reloading on each connection
+try:
     yolo_model = YOLO('yolov8n.pt')
-    
+    logger.info("YOLOv8 model loaded successfully.")
+except Exception as e:
+    logger.error(f"Error loading YOLOv8 model: {e}")
+    yolo_model = None
+
+async def process_video_feed(websocket):
     if not os.path.exists(MODEL_PATH):
         print(f"Warning: {MODEL_PATH} not found. Head pose detection will be disabled.")
         detector = None
@@ -91,12 +103,17 @@ async def process_video_feed(websocket):
     from utils.alerts import get_session
     session = get_session()
     
+    frame_count = 0
     try:
         while True:
             # Receive frame from frontend via WebSocket
             data = await websocket.receive_json()
             if data['type'] != 'frame':
                 continue
+            
+            frame_count += 1
+            if frame_count % 50 == 0:
+                logger.info(f"Processed {frame_count} frames for current session.")
                 
             frame_base64 = data['data']
             frame_bytes = base64.b64decode(frame_base64)

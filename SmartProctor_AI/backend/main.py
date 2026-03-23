@@ -21,6 +21,10 @@ app.add_middleware(
 def status():
     return get_status()
 
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+
 @app.get("/api/logs")
 def logs():
     return {"logs": get_logs()}
