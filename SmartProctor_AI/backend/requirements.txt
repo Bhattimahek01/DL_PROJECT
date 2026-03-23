@@ -1,0 +1,10 @@
+mediapipe
+fastapi
+uvicorn
+ultralytics
+opencv-python
+sounddevice
+numpy
+websockets
+pydantic
+python-multipart
