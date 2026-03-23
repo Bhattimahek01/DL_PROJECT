@@ -45,12 +45,75 @@ function App() {
     });
   }, []);
 
-  // WebSockets setup
+  // WebSockets and Media Streaming setup
   useEffect(() => {
     if (!sessionActive || isSuspended) return;
 
-    const videoWs = new WebSocket('ws://127.0.0.1:8000/ws/video');
-    const audioWs = new WebSocket('ws://127.0.0.1:8000/ws/audio');
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || '127.0.0.1:8000';
+    const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    
+    const videoWs = new WebSocket(`${WS_PROTOCOL}//${API_BASE}/ws/video`);
+    const audioWs = new WebSocket(`${WS_PROTOCOL}//${API_BASE}/ws/audio`);
+
+    let stream = null;
+    let videoInterval = null;
+    let audioProcessor = null;
+    let audioContext = null;
+
+    const startStreaming = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { width: 640, height: 480, frameRate: 10 }, 
+            audio: true 
+        });
+
+        // --- Video Streaming ---
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.play();
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 640;
+        canvas.height = 480;
+        const ctx = canvas.getContext('2d');
+
+        videoInterval = setInterval(() => {
+          if (videoWs.readyState === WebSocket.OPEN) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const base64Frame = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+            videoWs.send(JSON.stringify({ type: 'frame', data: base64Frame }));
+          }
+        }, 200); // 5 FPS
+
+        // --- Audio Streaming ---
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+        audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+        source.connect(audioProcessor);
+        audioProcessor.connect(audioContext.destination);
+
+        audioProcessor.onaudioprocess = (e) => {
+          if (audioWs.readyState === WebSocket.OPEN) {
+            const inputData = e.inputBuffer.getChannelData(0);
+            // Convert float32 to base64
+            const base64Audio = btoa(String.fromCharCode(...new Uint8Array(inputData.buffer)));
+            audioWs.send(JSON.stringify({ type: 'audio', data: base64Audio }));
+          }
+        };
+
+      } catch (err) {
+        console.error("Error accessing media devices:", err);
+        alert("Please allow camera and microphone access to continue the exam.");
+        setIsSuspended(true);
+        setSuspensionReason("Media access denied.");
+      }
+    };
+
+    videoWs.onopen = () => {
+        console.log("Video WebSocket connected");
+        startStreaming();
+    };
 
     videoWs.onmessage = (event) => {
       try {
@@ -60,11 +123,9 @@ function App() {
         } else if (data.type === 'alert') {
           handleNewAlert(data.data);
         } else if (data.type === 'termination') {
-          // Handle immediate termination
           setIsSuspended(true);
           setSuspensionReason(`EXAM TERMINATED: ${data.message}`);
           setStatus({ status: 'terminated', description: 'Exam terminated due to critical violation' });
-          // Close WebSocket connections
           videoWs.close();
           audioWs.close();
         }
@@ -85,6 +146,10 @@ function App() {
     };
 
     return () => {
+      if (videoInterval) clearInterval(videoInterval);
+      if (audioProcessor) audioProcessor.disconnect();
+      if (audioContext) audioContext.close();
+      if (stream) stream.getTracks().forEach(track => track.stop());
       videoWs.close();
       audioWs.close();
     };
@@ -223,8 +288,11 @@ function App() {
   };
 
   const handleStartSession = async (config) => {
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || '127.0.0.1:8000';
+    const HTTP_PROTOCOL = window.location.protocol === 'https:' ? 'https:' : 'http:';
+
     try {
-      await fetch('http://127.0.0.1:8000/api/session/start', {
+      await fetch(`${HTTP_PROTOCOL}//${API_BASE}/api/session/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
@@ -253,8 +321,11 @@ function App() {
   };
 
   const downloadReport = async () => {
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || '127.0.0.1:8000';
+    const HTTP_PROTOCOL = window.location.protocol === 'https:' ? 'https:' : 'http:';
+    
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/report/download');
+      const response = await fetch(`${HTTP_PROTOCOL}//${API_BASE}/api/report/download`);
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);

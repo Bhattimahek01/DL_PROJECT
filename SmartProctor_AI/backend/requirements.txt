@@ -2,8 +2,7 @@ mediapipe
 fastapi
 uvicorn
 ultralytics
-opencv-python
-sounddevice
+opencv-python-headless
 numpy
 websockets
 pydantic
