@@ -16,6 +16,7 @@ function App() {
   const [sessionActive, setSessionActive] = useState(false);
   const [examConfig, setExamConfig] = useState(null);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [localStream, setLocalStream] = useState(null);
 
   const [suspensionReason, setSuspensionReason] = useState('');
   
@@ -72,6 +73,7 @@ function App() {
             video: { width: 640, height: 480, frameRate: 10 }, 
             audio: true 
         });
+        setLocalStream(stream);
 
         // --- Video Streaming ---
         const video = document.createElement('video');
@@ -102,8 +104,15 @@ function App() {
         audioProcessor.onaudioprocess = (e) => {
           if (audioWs.readyState === WebSocket.OPEN) {
             const inputData = e.inputBuffer.getChannelData(0);
-            // Convert float32 to base64
-            const base64Audio = btoa(String.fromCharCode(...new Uint8Array(inputData.buffer)));
+            
+            // Safer way to convert float32 array to base64
+            // Avoids stack overflow for large buffers
+            const uint8Array = new Uint8Array(inputData.buffer);
+            let binary = '';
+            for (let i = 0; i < uint8Array.byteLength; i++) {
+                binary += String.fromCharCode(uint8Array[i]);
+            }
+            const base64Audio = btoa(binary);
             audioWs.send(JSON.stringify({ type: 'audio', data: base64Audio }));
           }
         };
@@ -156,6 +165,7 @@ function App() {
       if (audioProcessor) audioProcessor.disconnect();
       if (audioContext) audioContext.close();
       if (stream) stream.getTracks().forEach(track => track.stop());
+      setLocalStream(null);
       videoWs.close();
       audioWs.close();
     };
@@ -324,8 +334,19 @@ function App() {
     setSuspensionReason('');
     setSessionActive(false);
     setExamConfig(null);
+    resetStatusOnBackend(); // Notify backend to reset
     setStatus({ status: 'normal', description: 'No cheating detected' });
     setVideoFrame(null);
+    setLocalStream(null);
+  };
+
+  const resetStatusOnBackend = async () => {
+    const rawBase = import.meta.env.VITE_API_BASE_URL || '127.0.0.1:8000';
+    const API_BASE = rawBase.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const HTTP_PROTOCOL = window.location.protocol === 'https:' ? 'https:' : 'http:';
+    try {
+        await fetch(`${HTTP_PROTOCOL}//${API_BASE}/api/reset`, { method: 'POST' });
+    } catch (e) { console.error("Failed to reset backend", e); }
   };
 
   const downloadReport = async () => {
@@ -427,7 +448,7 @@ function App() {
       ) : (
         <main className="flex-1 grid grid-cols-1 xl:grid-cols-3 gap-6 p-6 lg:p-8 max-w-[1600px] w-full mx-auto">
           <div className="xl:col-span-2 flex flex-col gap-6">
-            <LiveCamera frame={videoFrame} />
+            <LiveCamera frame={videoFrame} localStream={localStream} />
             <CheatingLogs alerts={alerts} />
           </div>
           <div className="xl:col-span-1 h-[calc(100vh-140px)]">

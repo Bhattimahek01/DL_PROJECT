@@ -1,7 +1,15 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Camera, AlertCircle } from 'lucide-react';
 
-const LiveCamera = ({ frame }) => {
+const LiveCamera = ({ frame, localStream }) => {
+  const localVideoRef = useRef(null);
+
+  useEffect(() => {
+    if (localVideoRef.current && localStream && !frame) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream, frame]);
+
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-lg flex flex-col">
       <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
@@ -20,6 +28,14 @@ const LiveCamera = ({ frame }) => {
       <div className="relative aspect-video bg-black flex items-center justify-center">
         {frame ? (
           <img src={frame} alt="Live feed" className="w-full h-full object-cover" />
+        ) : localStream ? (
+          <video 
+            ref={localVideoRef} 
+            autoPlay 
+            muted 
+            playsInline 
+            className="w-full h-full object-cover"
+          />
         ) : (
           <div className="flex flex-col items-center text-slate-500 gap-3">
             <Camera className="w-12 h-12 opacity-20" />

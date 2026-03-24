@@ -11,8 +11,9 @@ import hashlib
 from utils.alerts import add_alert
 
 # Mediapipe Face Landmarker setup
-# We'll need the task file. I'll download it if it doesn't exist.
-MODEL_PATH = 'face_landmarker.task'
+import os
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_PATH = os.path.join(BASE_DIR, 'face_landmarker.task')
 
 # Note: In a real environment, you'd download this from:
 # https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
@@ -82,8 +83,13 @@ logger = logging.getLogger(__name__)
 
 # Initialize YOLO model globally to avoid reloading on each connection
 try:
-    yolo_model = YOLO('yolov8n.pt')
-    logger.info("YOLOv8 model loaded successfully.")
+    yolo_file = os.path.join(BASE_DIR, 'yolov8n.pt')
+    if os.path.exists(yolo_file):
+        yolo_model = YOLO(yolo_file)
+        logger.info(f"YOLOv8 model loaded successfully from {yolo_file}")
+    else:
+        logger.error(f"YOLO model file not found at {yolo_file}")
+        yolo_model = None
 except Exception as e:
     logger.error(f"Error loading YOLOv8 model: {e}")
     yolo_model = None
