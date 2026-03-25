@@ -7,3 +7,4 @@ numpy
 websockets
 pydantic
 python-multipart
+fpdf2

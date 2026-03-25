@@ -11,6 +11,7 @@ const MAX_ALERTS = 50;
 function App() {
   const [alerts, setAlerts] = useState([]);
   const [videoFrame, setVideoFrame] = useState(null);
+  const [activeViolations, setActiveViolations] = useState([]);
   const [status, setStatus] = useState({ status: 'normal', description: 'No cheating detected' });
   const [isSuspended, setIsSuspended] = useState(false);
   const [sessionActive, setSessionActive] = useState(false);
@@ -19,9 +20,38 @@ function App() {
   const [localStream, setLocalStream] = useState(null);
 
   const [suspensionReason, setSuspensionReason] = useState('');
+
+  // Synthesize beep sound using Web Audio API
+  const playBeep = useCallback((frequency = 440, duration = 0.2) => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const audioCtx = new AudioCtx();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + duration);
+    } catch (e) {
+      console.error("Audio beep error:", e);
+    }
+  }, []);
   
   // Memoized alert handler to be used in visibility change listener
   const handleNewAlert = useCallback((alert) => {
+    // Play warning sound
+    if (alert.type !== 'normal') {
+        playBeep(alert.type === 'camera_off' ? 220 : 440, 0.3);
+    }
+    
     setAlerts((prev) => {
       const newAlerts = [alert, ...prev];
       
@@ -87,11 +117,14 @@ function App() {
 
         videoInterval = setInterval(() => {
           if (videoWs.readyState === WebSocket.OPEN) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+            ctx.restore();
             const base64Frame = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
             videoWs.send(JSON.stringify({ type: 'frame', data: base64Frame }));
           }
-        }, 200); // 5 FPS
+        }, 100); // 10 FPS
 
         // --- Audio Streaming ---
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -135,6 +168,9 @@ function App() {
         const data = JSON.parse(event.data);
         if (data.type === 'frame') {
           setVideoFrame(`data:image/jpeg;base64,${data.data}`);
+          if (data.active_violations) {
+            setActiveViolations(data.active_violations);
+          }
         } else if (data.type === 'alert') {
           handleNewAlert(data.data);
         } else if (data.type === 'termination') {
@@ -448,7 +484,12 @@ function App() {
       ) : (
         <main className="flex-1 grid grid-cols-1 xl:grid-cols-3 gap-6 p-6 lg:p-8 max-w-[1600px] w-full mx-auto">
           <div className="xl:col-span-2 flex flex-col gap-6">
-            <LiveCamera frame={videoFrame} localStream={localStream} />
+            <LiveCamera 
+              frame={videoFrame} 
+              localStream={localStream} 
+              alerts={alerts} 
+              activeViolations={activeViolations} 
+            />
             <CheatingLogs alerts={alerts} />
           </div>
           <div className="xl:col-span-1 h-[calc(100vh-140px)]">

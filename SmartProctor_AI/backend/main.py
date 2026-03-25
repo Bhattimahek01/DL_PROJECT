@@ -17,6 +17,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Ensure reports directory exists
+import os
+if not os.path.exists("reports"):
+    os.makedirs("reports")
+    print("Created 'reports' directory")
+
 @app.get("/api/status")
 def status():
     return get_status()
@@ -61,14 +67,23 @@ def download_report():
     if not session:
         return {"error": "No active session found"}
     
-    # Create report filename
-    report_filename = f"report_{session.get('candidateId', 'unknown')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    # Create report filename (sanitize)
+    safe_name = "".join([c for c in str(session.get('candidateName', 'unknown')) if c.isalnum() or c in (' ', '_', '-')]).strip()
+    report_filename = f"Proctoring_Report_{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     report_path = os.path.join("reports", report_filename)
     
     try:
+        print(f"Generating PDF for candidate {session.get('candidateId')}...")
         generate_pdf_report(session, logs, report_path)
-        return FileResponse(path=report_path, filename=report_filename, media_type='application/pdf')
+        if os.path.exists(report_path):
+            print(f"PDF generated successfully at {report_path}")
+            return FileResponse(path=report_path, filename=report_filename, media_type='application/pdf')
+        else:
+            print(f"Error: PDF file was not created at {report_path}")
+            return {"error": "Failed to create PDF file"}
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return {"error": f"Failed to generate report: {str(e)}"}
 
 @app.websocket("/ws/video")
